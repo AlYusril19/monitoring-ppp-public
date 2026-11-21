@@ -1,0 +1,4 @@
+# Local runtime data: contains user records, balances, transactions, and bot state.
+datauser.json
+last_notification_time.json
+app_info.json
