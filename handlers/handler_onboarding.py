@@ -78,6 +78,7 @@ def handle_onboarding_input(update, context):
         "aktif": True,
         "monitoring": {},
         "monitoring_state": {},
+        "account_type": "client",
     }
     save_user_data(users)
     add_transaction(user_id, trial, "trial_balance", {"trial_balance": trial})

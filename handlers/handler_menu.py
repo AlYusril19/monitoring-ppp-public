@@ -35,6 +35,7 @@ def _send_user_dashboard(update, context, testing=False):
          InlineKeyboardButton("💳 Saldo", callback_data="menu:wallet")],
         [InlineKeyboardButton("⚙️ Monitoring", callback_data="menu:monitor"),
          InlineKeyboardButton("🧹 Chat", callback_data="menu:cleanup")],
+        [InlineKeyboardButton("🔒 Logout Router", callback_data="nav:logout")],
         [InlineKeyboardButton("🗑 Hapus Akun", callback_data="onboard:delete_confirm")],
     ])
     title = "🧪 Dashboard User Testing" if testing else "🏠 Dashboard User"
@@ -64,6 +65,13 @@ def menu_callback(update, context):
         context.user_data.pop("user_testing_mode", None)
         query.answer()
         show_menu(update, context)
+        return
+    if data == "nav:logout":
+        user_data_dict.pop(query.from_user.id, None)
+        query.answer("Logout router berhasil.")
+        query.edit_message_text(
+            "✅ Login router dibersihkan untuk sesi ini.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Dashboard", callback_data="nav:home")]]))
         return
     if data.startswith("admin:"):
         _admin_callback(update, context)
@@ -291,6 +299,7 @@ def _admin_callback(update, context):
             [InlineKeyboardButton("🔧 Server Custom", callback_data="srv:custom")],
             [InlineKeyboardButton("📈 Traffic", callback_data="menu:traffic"),
              InlineKeyboardButton("💳 Saldo", callback_data="menu:wallet")],
+            [InlineKeyboardButton("🔒 Logout Router", callback_data="nav:logout")],
             [InlineKeyboardButton("🏠 Dashboard Admin", callback_data="nav:home")],
         ])
         query.edit_message_text("🧪 *Dashboard User Testing*", parse_mode="Markdown", reply_markup=keyboard)
@@ -334,5 +343,6 @@ def _ensure_staff_test_record(user):
             "aktif": True,
             "monitoring": {},
             "monitoring_state": {},
+            "account_type": "admin",
         }
         save_user_data(users)

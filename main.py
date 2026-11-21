@@ -27,8 +27,11 @@ from handlers.handler_menu import show_menu, menu_callback
 from handlers.handler_monitor_settings import monitoring_settings
 from handlers.handler_wallet import capture_payment_proof, set_qris_command
 from handlers.handler_admin_settings import settings_command, set_price_command, set_role_command, set_trial_command
+from configs.data_json_user import migrate_account_types
 
 def main():
+    # Add the admin/client marker to records created by earlier releases.
+    migrate_account_types()
     # Inisialisasi bot Telegram
     updater = Updater(bot=bot)
     dp=updater.dispatcher

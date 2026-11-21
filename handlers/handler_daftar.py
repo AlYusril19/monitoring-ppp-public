@@ -32,7 +32,8 @@ def daftar_for_admin(update, context):
                 "saldo": saldo_awal,
                 "created_at": get_current_time(),
                 "servers": [],
-                "aktif": True  # ✅ langsung aktif kalau didaftarkan oleh admin
+                "aktif": True,  # ✅ langsung aktif kalau didaftarkan oleh admin
+                "account_type": "client",
             }
 
         save_user_data(user_data)
@@ -69,7 +70,8 @@ def daftar_for_client(update, context):
             "saldo": saldo_awal,
             "created_at": get_current_time(),
             "servers": [],
-            "aktif": False  # 🚨 tambahkan ini agar status default arsip
+            "aktif": False,  # 🚨 tambahkan ini agar status default arsip
+            "account_type": "client",
         }
 
         save_user_data(user_data)

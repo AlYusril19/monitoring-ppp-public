@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 
 import requests
 from io import BytesIO
+from configs.navigation import home_keyboard
 
 import os
 
@@ -22,8 +23,10 @@ chat_log = int(os.environ.get('LOG_USER_ID'))
 bot_log = Bot(token=telegram_bot_log_token)
 
 # Send Message Text
-def send_message(bot, chat_id, message):
-    bot.send_message(chat_id=chat_id, text=message, parse_mode='markdown')
+def send_message(bot, chat_id, message, with_dashboard=True):
+    """Send a response with a Dashboard shortcut unless explicitly disabled."""
+    reply_markup = home_keyboard() if with_dashboard else None
+    return bot.send_message(chat_id=chat_id, text=message, parse_mode='markdown', reply_markup=reply_markup)
 
 # Send Message Image
 def send_image(bot, chat_id, image_url):

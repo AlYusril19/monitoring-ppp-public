@@ -8,6 +8,19 @@ NOTIFICATION_DATA_FILE = os.path.join(BASE_DIR, "last_notification_time.json")
 APP_INFO_FILE = os.path.join(BASE_DIR, "app_info.json")
 
 
+def migrate_account_types():
+    """Mark existing records as admin/client without changing balances or servers."""
+    users = load_user_data()
+    admin_ids = {item.strip() for item in os.environ.get("ALLOWED_ADMIN_IDS", "").split(",") if item.strip()}
+    changed = False
+    for user_id, record in users.items():
+        if "account_type" not in record:
+            record["account_type"] = "admin" if user_id in admin_ids else "client"
+            changed = True
+    if changed:
+        save_user_data(users)
+
+
 def load_user_data():
     try:
         with open(USER_DATA_FILE, "r") as file:

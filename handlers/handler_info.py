@@ -2,6 +2,8 @@ from configs.send_message import allowed_admin_ids, send_message
 from configs.data_json_user import load_user_data
 import os
 from dotenv import load_dotenv
+from configs.app_settings import get_monitoring_config, get_price
+from configs.navigation import home_keyboard
 load_dotenv()
 
 def info_command_handler(update, context):
@@ -62,7 +64,7 @@ def infolengkap_command_handler(update, context):
     send_message(bot, chat_id, message3)
 
 def notify_command_handler(update, context):
-    user_id = str(update.effective_user.id)  # Mengonversi user_id ke string
+    user_id = str(update.effective_user.id)
     bot = context.bot
     chat_id = update.effective_chat.id
     user_data = load_user_data()
@@ -71,27 +73,20 @@ def notify_command_handler(update, context):
         update.message.reply_text("Anda belum terdaftar, silahkan /daftar terlebih dahulu.")
         return
     
-    message = "*Fitur Notify digunakan untuk pengecekan client PPPOE secara otomatis*"
-    message = "Berikut adalah syarat dan ketentuan menggunakan fitur ini."     
-    message += "```Syarat"\
-                "  - Pastikan anda sudah menyimpan data\n"\
-                "    server menggunakan /addserver\n"\
-                "  - Gunakan user READ untuk keamanan data\n"\
-                "    anda\n"\
-                "  - Pastikan services API anda sudah aktif\n"\
-                "    dengan port default\n"\
-                "  - Lakukan uji coba /connect ke server```"
-    message += "```Ketentuan"\
-                "  - Schedule pengecekan dilakukan setiap 30\n"\
-                "    menit sekali selama 24jam nonstop\n"\
-                "  - Cek pada log Mikrotik anda jika ada log\n"\
-                "    login setiap 30 menit maka program\n"\
-                "    sudah berjalan\n"\
-                "  - Jika pesan notifikasi terkirim, maka\n "\
-                "    pengecekan akan dilakukan kembali\n"\
-                "    selama 4 jam kemudian\n" \
-                "  - Jika pesan notifikasi terkirim >20:00\n"\
-                "    maka pengecekan akan dilakukan kembali\n"\
-                "    di jam 07:00```"
-    
-    send_message(bot, chat_id, message)
+    config = get_monitoring_config(user_data[user_id])
+    message = (
+        "*Monitoring PPPoE Otomatis*\n\n"
+        "Syarat:\n"
+        "- Simpan minimal satu server melalui *Server Saya*.\n"
+        "- RouterOS API harus aktif dan gunakan akun READ.\n"
+        "- Server Custom hanya untuk sesi manual; monitoring otomatis memakai server tersimpan.\n\n"
+        "Cara kerja:\n"
+        f"- Interval normal: *{config['normal_interval_minutes']} menit*.\n"
+        f"- Setelah ditemukan user down: *{config['alert_interval_minutes']} menit*.\n"
+        "- Notifikasi pertama saat down dipotong sesuai harga notifikasi.\n"
+        "- Saat status pulih, bot mengirim notifikasi recovery dan kembali ke interval normal.\n"
+        "- Jika saldo tidak cukup, monitoring dijeda sampai Anda melanjutkan dari menu Monitoring.\n\n"
+        f"Biaya notifikasi saat ini: *Rp{get_price('notify'):,}*.\n"
+        "Atur interval, jeda, atau lanjutkan lewat tombol *Monitoring* di Dashboard."
+    )
+    update.effective_message.reply_text(message, parse_mode="Markdown", reply_markup=home_keyboard())

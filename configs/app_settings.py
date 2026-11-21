@@ -77,6 +77,12 @@ def set_role(user_id, role):
     else:
         settings["roles"][str(user_id)] = role
     save_settings(settings)
+    # Keep the account type visible in datauser.json for administrators.
+    from configs.data_json_user import load_user_data, save_user_data
+    users = load_user_data()
+    if str(user_id) in users:
+        users[str(user_id)]["account_type"] = "client" if role == "user" else "admin"
+        save_user_data(users)
 
 
 def get_trial_balance():
