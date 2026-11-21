@@ -1,252 +1,117 @@
-from librouteros import connect
-from telegram import Bot, Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from dotenv import load_dotenv
-from mikrotik_function import get_name_server, get_down_users
-from userdata import UserData
-import os
-
-load_dotenv()
-
-user_data_dict = {}
-
-telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-chat_user_ids = os.environ.get('ALLOWED_USER_IDS')
-
-allowed_user_ids = set(map(int, chat_user_ids.split(',')))
-bot = Bot(token=telegram_bot_token)
-
-def start_command_handler(update, context):
-    user_id = update.effective_user.id
-    username_telegram = update.effective_user.username #username pengguna telegram
-
-
-    if user_id not in allowed_user_ids:
-        update.message.reply_text("Anda tidak diizinkan menggunakan bot ini.")
-        return
-
-    user_data = user_data_dict.get(user_id)
-
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    if user_data.ip_address is None:
-        # Jika IP belum diisi, kirim pertanyaan ke pengguna
-        message = f"Selamat datang, *{username_telegram}*! Silakan masukkan IP MikroTik Anda:"
-        update.message.reply_text(message)
-
-    elif user_data.router_username is None:
-        # Jika username belum diisi, kirim pertanyaan ke pengguna
-        message = "Silakan masukkan username:"
-        update.message.reply_text(message)
-
-    elif user_data.router_password is None:
-        # Jika password belum diisi, kirim pertanyaan ke pengguna
-        message = "Silakan masukkan password:"
-        update.message.reply_text(message)
-
-    else:
-        # Jika semua sudah diisi, lanjutkan dengan proses normal
-        start_command_handler_after_input(update, context, user_data)
-
-def start_command_handler_after_input(update, context, user_data):
-    message = "Program Skytama Sudah Berjalan"
-    bot = context.bot
-    chat_id = update.effective_chat.id
-    send_message(bot, chat_id, message)
-
-    try:
-        # Membuat koneksi ke MikroTik
-        connection = connect(
-            username=user_data.router_username,
-            password=user_data.router_password,
-            host=user_data.ip_address
-        )
-
-        nama_server = get_name_server(connection)
-
-        # Cek apakah login berhasil
-        if connection:
-            print("Login berhasil!")
-            print(f"Login ke server {nama_server}")
-            # Kirim pesan telegram
-            send_message(bot, chat_id, f"Login ke server *{nama_server}*")
-
-            # Mendapatkan semua pengguna yang statusnya "down"
-            down_users = get_down_users(connection)
-            print(down_users)  # Tambahkan print statement untuk memeriksa down_users
-            if down_users:
-                down_users_message = "Client PPPOE status *DOWN*:\n"
-                for username in down_users:
-                    down_users_message += f"- {username} ❌ \n"
-                send_message(bot, chat_id, down_users_message)
-                send_message(bot,chat_id,"\n*Jika sudah selesai silahkan* /exit\n" \
-                                "Gunakan /test untuk monitoring ulang")
-            else:
-                send_message(bot, chat_id, "User Status UP Semua 🤩")
-        else:
-            print("Login gagal!")
-            send_message(bot, chat_id, "Login Gagal")
-    except Exception as e:
-        print("Terjadi kesalahan:", str(e))
-        send_message(bot, chat_id, f"Terjadi kesalahan: {str(e)}")
-        exit_command_handler(update, context)
-
-def handle_input(update, context):
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    # Mendapatkan input dari pengguna
-    if user_data.ip_address is None:
-        user_data.ip_address = update.message.text.strip()
-        message = "Silakan masukkan username:"
-        update.message.reply_text(message)
-
-    elif user_data.router_username is None:
-        user_data.router_username = update.message.text.strip()
-        message = "Silakan masukkan password:"
-        update.message.reply_text(message)
-
-    elif user_data.router_password is None:
-        user_data.router_password = update.message.text.strip()
-        message = "Semua informasi telah disimpan. Ketik /test untuk melanjutkan."
-        update.message.reply_text(message)
-    else:
-        message = "Semua informasi telah disimpan. Ketik /test untuk melanjutkan."
-        update.message.reply_text(message)
-
-def info_command_handler(update, context):
-    username_telegram = update.effective_user.username #username pengguna telegram
-    message = f"Selamat datang, {username_telegram} ini adalah BOT Skytama\n\n" \
-              "Bot ini hanya digunakan untuk staff / rekan SkyTaMa\n" \
-              "Silahkan tekan /info untuk informasi lebih lanjut\n"
-    update.message.reply_text(message)
-
-def infolengkap_command_handler(update, context):
-    message = "Berikut adalah command server *SkyTaMa*\n\n" \
-            "/home Server Rumah\n" \
-            "/feriz Server Feriz\n" \
-            "/ngembat Server Ngembat\n" \
-            "/iza Server Iza\n\n" \
-            "Jika muncul pesan kendala (error) silahkan /exit terlebih dahulu\n\n" \
-            "bot skytama versi 1.3"
-    update.message.reply_text(message)
-
-def send_message(bot, chat_id, message):
-    bot.send_message(chat_id=chat_id, text=message, parse_mode='markdown')
-
-def exit_command_handler(update, context):
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data:
-        user_data.ip_address = None
-        user_data.router_username = None
-        user_data.router_password = None
-
-    message = "Data telah di reset, lakukan command kembali atau buka /info untuk" \
-    "informasi lebih lengkapnya"
-    update.message.reply_text(message)
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackQueryHandler
+from apscheduler.schedulers.background import BackgroundScheduler
+from configs.send_message import bot
+from handlers.handler_input import handle_input
+from handlers.handler_start import start_command_handler, start_command_handler_by_custom
+from handlers.handler_info import info_command_handler, infolengkap_command_handler
+from handlers.handler_exit import exit_command_handler
+from handlers.handler_traffic import monitoring_command_handler
+from handlers.handler_version import version_command_handler
+from handlers.handler_warning import warning
+from handlers. handler_saldo_cek import cek_saldo
+from handlers.handler_saldo_topup import topup
+from handlers.handler_saldo_user import cek_semua_saldo
+from handlers.handler_daftar import daftar
+from handlers.handler_biaya import biaya_fitur
+from handlers.handler_traffic import monitoring_command_handler
+from handlers.handler_server import add_server, delete_server, edit_server
+from handlers.handler_list_server import list_servers
+from handlers.handler_connect_server import connect_to_server, server_name_handler, cancel, SERVER_NAME
+from handlers.check_client_status_and_notify import check_client_status_and_notify
+from handlers.handler_transaction import check_monthly_transactions, check_yearly_transactions
+from handlers.handler_all_transaction import check_monthly_user_transactions, check_yearly_user_transactions
+from handlers.handler_info import notify_command_handler
+from handlers.send_startup_message import send_startup_message
+from handlers.handler_user import aktifkan_user, user_aktif, arsipkan_user, user_arsip
+from handlers.handler_menu import show_menu, menu_callback
+from handlers.handler_monitor_settings import monitoring_settings
+from handlers.handler_wallet import capture_payment_proof, set_qris_command
+from handlers.handler_admin_settings import settings_command, set_price_command, set_role_command, set_trial_command
 
 def main():
     # Inisialisasi bot Telegram
     updater = Updater(bot=bot)
+    dp=updater.dispatcher
+
+    # Tambahkan ConversationHandler untuk perintah /connect
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('connect', connect_to_server)],
+        states={
+            SERVER_NAME: [MessageHandler(Filters.text & ~Filters.command, server_name_handler)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    dp.add_handler(conv_handler)
 
     # Menambahkan handler untuk command /<perintah>
-    updater.dispatcher.add_handler(CommandHandler('test', start_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('start', info_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('home', home_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('feriz', feriz_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('ngembat', ngembat_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('iza', iza_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('exit', exit_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('info', infolengkap_command_handler))
-    updater.dispatcher.add_handler(CommandHandler('custom', custom_command_handler))
+    dp.add_handler(CommandHandler('start', show_menu))
+    dp.add_handler(CommandHandler('menu', show_menu))
+    dp.add_handler(CommandHandler('exit', exit_command_handler))
+    
+    # Handler Informasi
+    dp.add_handler(CommandHandler('why', warning))
+    dp.add_handler(CommandHandler('infonotify', notify_command_handler))
+    dp.add_handler(CommandHandler('info', infolengkap_command_handler))
+    dp.add_handler(CommandHandler('version', version_command_handler))
+    
+    # List Server
+    dp.add_handler(CommandHandler('custom', start_command_handler_by_custom))
+    dp.add_handler(CommandHandler('listserver', list_servers))
+    dp.add_handler(CommandHandler('addserver', add_server))
+    dp.add_handler(CommandHandler('editserver', edit_server))
+    dp.add_handler(CommandHandler('delserver', delete_server))
+    # updater.dispatcher.add_handler(CommandHandler('connect', connect_to_server))
+    
+    # Monitoring Server
+    dp.add_handler(CommandHandler('testppp', start_command_handler))
+    dp.add_handler(CommandHandler('traffic', monitoring_command_handler))
+    
+    # Monitoring Manajemen Saldo
+    dp.add_handler(CommandHandler('topup', topup))
+    dp.add_handler(CommandHandler('saldo', cek_saldo))
+    dp.add_handler(CommandHandler('daftar', daftar))
+    dp.add_handler(CommandHandler('biaya', biaya_fitur))
+    dp.add_handler(CommandHandler('monitoring', monitoring_settings))
+    dp.add_handler(CommandHandler('historybulanan', check_monthly_transactions))
+    dp.add_handler(CommandHandler('historytahunan', check_yearly_transactions))
+    
+    # Handler Manajemen Saldo Admin
+    dp.add_handler(CommandHandler('saldouser', cek_semua_saldo))
+    dp.add_handler(CommandHandler('laporanbulanan', check_monthly_user_transactions))
+    dp.add_handler(CommandHandler('laporantahunan', check_yearly_user_transactions))
+    dp.add_handler(CommandHandler('settings', settings_command))
+    dp.add_handler(CommandHandler('setprice', set_price_command))
+    dp.add_handler(CommandHandler('setrole', set_role_command))
+    dp.add_handler(CommandHandler('settrial', set_trial_command))
+    dp.add_handler(CommandHandler('setqris', set_qris_command))
+    
+    # Handler Manajemen User Aktif dan Arsip
+    dp.add_handler(CommandHandler("arsipkan", arsipkan_user))
+    dp.add_handler(CommandHandler("aktifkan", aktifkan_user))
+    dp.add_handler(CommandHandler("useraktif", user_aktif))
+    dp.add_handler(CommandHandler("userarsip", user_arsip))
+
+    # Button callbacks are handled before free-form input so menus never leave
+    # command-like text in the chat history.
+    dp.add_handler(CallbackQueryHandler(menu_callback))
+    dp.add_handler(MessageHandler(Filters.photo, capture_payment_proof))
 
     # Menambahkan handler untuk menerima input IP, username, dan password
-    updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_input))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_input))
 
+    # Scheduler untuk menjalankan fungsi secara periodik
+    job_queue = updater.job_queue
+    # The job wakes once a minute; each user uses their own normal/alert interval.
+    job_queue.run_repeating(check_client_status_and_notify, interval=60, first=0)
+    
+    # Kirim pesan startup kepada semua pengguna
+    send_startup_message(dp)
+    
     # Memulai polling pesan dari Telegram
     updater.start_polling()
 
     # Menjaga agar program tetap berjalan
     updater.idle()
-
-def custom_command_handler(update, context):
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data:
-        user_data.ip_address = None
-        user_data.router_username = None
-        user_data.router_password = None
-
-    start_command_handler(update, context)
-
-def home_command_handler(update, context):
-    server_data = os.environ.get('SERVER_HOME').split(',')
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    user_data.ip_address = server_data[0]
-    user_data.router_username = server_data[1]
-    user_data.router_password = server_data[2]
-    message = "Lanjutkan /test untuk menjalankan program"
-    update.message.reply_text(message)
-
-def feriz_command_handler(update, context):
-    server_data = os.environ.get('SERVER_FERIZ').split(',')
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    user_data.ip_address = server_data[0]
-    user_data.router_username = server_data[1]
-    user_data.router_password = server_data[2]
-    message = "Lanjutkan /test untuk menjalankan program"
-    update.message.reply_text(message)
-
-def ngembat_command_handler(update, context):
-    server_data = os.environ.get('SERVER_NGEMBAT').split(',')
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    user_data.ip_address = server_data[0]
-    user_data.router_username = server_data[1]
-    user_data.router_password = server_data[2]
-    message = "Lanjutkan /test untuk menjalankan program"
-    update.message.reply_text(message)
-
-def iza_command_handler(update, context):
-    server_data = os.environ.get('SERVER_IZA').split(',')
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    user_data.ip_address = server_data[0]
-    user_data.router_username = server_data[1]
-    user_data.router_password = server_data[2]
-    message = "Lanjutkan /test untuk menjalankan program"
-    update.message.reply_text(message)
     
 
 if __name__ == '__main__':

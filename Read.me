@@ -1,0 +1,71 @@
+Update 1.4.1
+    - Fitur jam Down 
+        # update di mikrotik_function
+        # handler_start
+
+Update 1.4.2
+    - Fitur LOG user
+        # update env
+        # update send_message
+        # update handler_start
+
+Update 1.4.3
+    - Perbaikan LOG (handler start)
+        # update pesan LOG
+        # update pesan User
+        # update pesan warning
+
+Update 1.5.1
+    - Fitur Monitoring Traffic
+        # update fitur traffic server LB Home
+
+Update 2.0.0
+    - Fitur Saldo
+        # penambahan handler topup, saldouser, saldo, daftar, biaya
+        # penghapusan allowed_user_ids (diganti dengan pengguna terdaftar di json)
+        # file baru di configs (data_json_user, format rupiah)
+
+Update 2.0.1
+    - Fitur Saldo
+        # edit handler server (menjadi input data ke json dengan maksimal 2 data server)
+        # penambahan handler list_server, add_server, delserver, connect_server
+        # penambahan fitur custom IP
+
+Update 2.1.0 (10/06/2024)
+    - Fitur Notify
+        # menambahkan handler history transaksi (all_transaction, transaction)
+        # menambahkan konfig (add_transaction, calculate_transaction)
+        # menambahkan handler check_client_status_and_notify
+        # menambahkan fungsi di main (menjalankan otomatis check_client_status dengan interval 30 menit)
+        # menambahkan file json last_notification_time.json (configs.data_json_user)
+        # mengubah beberapa send_message yang sebelumnya menggunakan update / context 
+
+Update 2.1.1 (22/06/2024)
+    - Update
+        # menambahkan created_at dan updated_at pada tiap database
+        # menambahkan fitur edit_server
+        # menambahkan startup messages
+        # menambahkan utils get_current_time
+
+Update 2.1.2 (10/04/2025)
+    - Update
+        # add server maksimal 4 dari sebelumnya 2
+        # update harga
+        # add manajemen user (aktif dan arsip)
+        # info untuk admin
+
+Update berikutnya
+    - Dashboard tombol terpisah untuk user dan admin
+    - Registrasi mandiri, saldo trial yang dapat diatur, QRIS, dan approval topup
+    - Server custom sementara, tanpa disimpan ke daftar server
+    - Interval monitoring normal/alert yang dapat diatur
+    - Dokumentasi pengembangan: `docs/ARSITEKTUR.md`
+    - Panduan Graphify: `docs/GRAPHIFY.md`
+
+Update 2.2.0 (21/11/2026)
+    - Dashboard tombol terpisah untuk user, admin, dan user testing
+    - Registrasi mandiri, saldo trial, QRIS, approval topup, dan hapus akun
+    - Traffic mengikuti Tools > Graphing; entry `all` aktif menampilkan seluruh interface
+    - Monitoring PPPoE mengarahkan pemilihan server bila router belum terhubung
+    - Laporan pendapatan bulanan/tahunan tersedia di Dashboard Admin
+    - Dokumentasi arsitektur dan workflow Graphify
