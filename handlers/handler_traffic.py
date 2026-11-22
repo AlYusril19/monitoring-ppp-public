@@ -7,7 +7,7 @@ from handlers.handler_exit_interface import exit_interface_command_handler
 from configs.data_json_user import load_user_data, save_user_data, get_registered_username
 from configs.format_rupiah import format_rupiah
 from configs.billing import charge_user
-from configs.navigation import home_keyboard
+from configs.navigation import session_action_keyboard
 
 def monitoring_command_handler(update, context):
     user_id = update.effective_user.id
@@ -53,7 +53,7 @@ def run_traffic_monitoring(context, user_id, chat_id, user_data):
     send_message(bot_log, chat_log,f"user *{username_telegram or user_id}* Monitoring LB {user_data.interface} \n" \
                                     f"Sisa saldo User {saldo_format}")
     user_data.interface = None
-    bot.send_message(chat_id=chat_id, text="Pilih aksi berikutnya:", reply_markup=home_keyboard())
+    bot.send_message(chat_id=chat_id, text="Pilih aksi berikutnya:", reply_markup=session_action_keyboard())
 
 
 # Compatibility for callers from older conversation code.

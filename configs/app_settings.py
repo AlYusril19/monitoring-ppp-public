@@ -18,6 +18,10 @@ DEFAULT_SETTINGS = {
     "monitoring": {
         "normal_interval_minutes": 20,
         "alert_interval_minutes": 120,
+        "notify_down_threshold": 1,
+        "warning_threshold": 6,
+        "critical_threshold": 12,
+        "excluded_profiles": ["expired", "pribadi-home"],
     },
     "trial_balance": 5000,
     "qris_file_id": None,
@@ -108,5 +112,15 @@ def set_qris_file_id(file_id):
 def get_monitoring_config(user_record):
     config = load_settings()["monitoring"].copy()
     config.update(user_record.get("monitoring", {}))
+    # Keep values safe when reading records created by older bot versions.
+    for key in ("notify_down_threshold", "warning_threshold", "critical_threshold"):
+        try:
+            config[key] = max(1, int(config[key]))
+        except (KeyError, TypeError, ValueError):
+            config[key] = DEFAULT_SETTINGS["monitoring"][key]
+    profiles = config.get("excluded_profiles", [])
+    if isinstance(profiles, str):
+        profiles = profiles.split(",")
+    config["excluded_profiles"] = [str(item).strip() for item in profiles if str(item).strip()]
     return config
 

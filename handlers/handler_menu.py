@@ -8,12 +8,20 @@ from models.userdata import UserData, user_data_dict
 from handlers.handler_monitor_settings import monitoring_callback, monitoring_settings
 from handlers.handler_start import run_pppoe_test, begin_custom_server
 from handlers.handler_traffic import run_traffic_monitoring
-from handlers.handler_wallet import topup_approval_callback, wallet_callback, wallet_menu
+from handlers.handler_wallet import (begin_manual_topup, pending_topups_menu,
+                                    topup_approval_callback, topup_queue_callback,
+                                    wallet_callback, wallet_menu)
 from configs.chat_cleanup import schedule_cleanup
-from handlers.handler_onboarding import new_user_menu, onboarding_callback
-from handlers.handler_server import start_server_wizard
-from configs.app_settings import is_staff, is_superadmin
+from handlers.handler_onboarding import (new_user_menu, onboarding_callback,
+                                         pending_registrations_menu,
+                                         registration_approval_callback,
+                                         registration_queue_callback)
+from handlers.handler_server import start_edit_server_wizard, start_server_wizard
+from configs.app_settings import is_staff, is_superadmin, load_settings
 from handlers.handler_all_transaction import check_monthly_user_transactions, check_yearly_user_transactions
+from handlers.handler_info import infolengkap_command_handler, notify_command_handler
+from handlers.handler_biaya import biaya_fitur
+from configs.navigation import home_keyboard, wizard_keyboard
 
 
 def show_menu(update, context):
@@ -27,17 +35,22 @@ def show_menu(update, context):
 
 
 def _send_user_dashboard(update, context, testing=False):
-    keyboard = InlineKeyboardMarkup([
+    keyboard_rows = [
         [InlineKeyboardButton("🖥 Server Saya", callback_data="menu:servers"),
-         InlineKeyboardButton("📡 Monitor PPPoE", callback_data="menu:pppoe")],
-        [InlineKeyboardButton("🔧 Server Custom", callback_data="srv:custom")],
-        [InlineKeyboardButton("📈 Traffic", callback_data="menu:traffic"),
-         InlineKeyboardButton("💳 Saldo", callback_data="menu:wallet")],
-        [InlineKeyboardButton("⚙️ Monitoring", callback_data="menu:monitor"),
-         InlineKeyboardButton("🧹 Chat", callback_data="menu:cleanup")],
-        [InlineKeyboardButton("🔒 Logout Router", callback_data="nav:logout")],
+         InlineKeyboardButton("🔧 Server Custom", callback_data="srv:custom")],
+        [InlineKeyboardButton("📡 Monitor PPPoE", callback_data="menu:pppoe"),
+         InlineKeyboardButton("📈 Monitor Traffic", callback_data="menu:traffic")],
+        [InlineKeyboardButton("💳 Saldo", callback_data="menu:wallet"),
+         InlineKeyboardButton("⚙️ Monitoring", callback_data="menu:monitor")],
+        [InlineKeyboardButton("ℹ️ Info", callback_data="menu:info"),
+         InlineKeyboardButton("🔔 Info Notify", callback_data="menu:notify")],
+        [InlineKeyboardButton("🧹 Chat", callback_data="menu:cleanup")],
         [InlineKeyboardButton("🗑 Hapus Akun", callback_data="onboard:delete_confirm")],
-    ])
+    ]
+    session = user_data_dict.get(update.effective_user.id)
+    if session and session.ip_address:
+        keyboard_rows.insert(-1, [InlineKeyboardButton("🔒 Logout Router", callback_data="nav:logout")])
+    keyboard = InlineKeyboardMarkup(keyboard_rows)
     title = "🧪 Dashboard User Testing" if testing else "🏠 Dashboard User"
     record = load_user_data().get(str(update.effective_user.id), {})
     balance = int(record.get("saldo", 0))
@@ -52,8 +65,13 @@ def _send_admin_dashboard(update, context):
          InlineKeyboardButton("💳 QRIS", callback_data="admin:qris")],
         [InlineKeyboardButton("⚙️ Harga & Role", callback_data="admin:settings"),
          InlineKeyboardButton("👥 Data User", callback_data="admin:users")],
+        [InlineKeyboardButton("📥 Antrian Registrasi", callback_data="admin:registrations"),
+         InlineKeyboardButton("⏳ Antrian Topup", callback_data="admin:topups")],
+        [InlineKeyboardButton("➕ Tambah Saldo", callback_data="admin:manualtopup")],
         [InlineKeyboardButton("📊 Pendapatan Bulanan", callback_data="admin:monthly"),
          InlineKeyboardButton("📈 Pendapatan Tahunan", callback_data="admin:yearly")],
+        [InlineKeyboardButton("ℹ️ Info", callback_data="menu:info"),
+         InlineKeyboardButton("🔔 Info Notify", callback_data="menu:notify")],
     ])
     update.effective_message.reply_text("🛡 *Dashboard Admin*\nPilih pengelolaan:", parse_mode="Markdown", reply_markup=keyboard)
 
@@ -73,24 +91,49 @@ def menu_callback(update, context):
             "✅ Login router dibersihkan untuk sesi ini.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Dashboard", callback_data="nav:home")]]))
         return
+    if data.startswith("input:"):
+        _input_wizard_callback(query, context)
+        return
     if data.startswith("admin:"):
         _admin_callback(update, context)
         return
     if data.startswith("onboard:"):
         onboarding_callback(query, context)
         return
+    if data.startswith("reg:"):
+        if data.startswith("reg:view:"):
+            registration_queue_callback(query, context)
+        else:
+            registration_approval_callback(query, context)
+        return
     if data.startswith("mon:"):
-        monitoring_callback(query)
+        monitoring_callback(query, context)
         return
     if data.startswith("wallet:"):
         wallet_callback(query, context)
         return
     if data.startswith("topup:"):
-        topup_approval_callback(query, context)
+        if data.startswith("topup:view:"):
+            topup_queue_callback(query, context)
+        else:
+            topup_approval_callback(query, context)
+        return
         return
     if data == "menu:monitor":
         query.answer()
         monitoring_settings(update, context)
+        return
+    if data == "menu:info":
+        query.answer()
+        infolengkap_command_handler(update, context)
+        return
+    if data == "menu:notify":
+        query.answer()
+        notify_command_handler(update, context)
+        return
+    if data == "menu:biaya":
+        query.answer()
+        biaya_fitur(update, context)
         return
     if data == "menu:wallet":
         query.answer()
@@ -129,6 +172,18 @@ def menu_callback(update, context):
     if data.startswith("srv:connect:"):
         _connect_server(query, int(data.rsplit(":", 1)[1]))
         return
+    if data.startswith("srv:manage:"):
+        _show_server_manage(query, int(data.rsplit(":", 1)[1]))
+        return
+    if data.startswith("srv:edit:"):
+        start_edit_server_wizard(query, context, int(data.rsplit(":", 1)[1]))
+        return
+    if data.startswith("srv:deleteask:"):
+        _ask_delete_server(query, int(data.rsplit(":", 1)[1]))
+        return
+    if data.startswith("srv:deleteconfirm:"):
+        _delete_server(query, int(data.rsplit(":", 1)[1]))
+        return
     if data == "srv:add":
         start_server_wizard(query, context)
         return
@@ -152,11 +207,59 @@ def _show_servers(query):
             "Belum ada server. Tambahkan server pertama Anda.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Tambah server", callback_data="srv:add")]]))
         return
-    keyboard = [[InlineKeyboardButton(f"🔌 {server['name']}", callback_data=f"srv:connect:{index}")]
+    keyboard = [[InlineKeyboardButton(f"🔌 {server['name']}", callback_data=f"srv:connect:{index}"),
+                 InlineKeyboardButton("⚙️ Kelola", callback_data=f"srv:manage:{index}")]
                 for index, server in enumerate(servers)]
     keyboard.append([InlineKeyboardButton("➕ Tambah server", callback_data="srv:add")])
     query.answer()
     query.edit_message_text("Pilih server untuk dihubungkan:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+def _show_server_manage(query, index):
+    servers = _servers_for(query.from_user.id)
+    if index >= len(servers):
+        query.answer("Server tidak ditemukan.", show_alert=True)
+        return
+    server = servers[index]
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Edit Server", callback_data=f"srv:edit:{index}"),
+         InlineKeyboardButton("🗑 Hapus Server", callback_data=f"srv:deleteask:{index}")],
+        [InlineKeyboardButton("⬅️ Daftar Server", callback_data="menu:servers")],
+    ])
+    query.answer()
+    query.edit_message_text(
+        f"Kelola server *{server['name']}*\nIP: `{server['ip']}`\nPilih tindakan:",
+        parse_mode="Markdown", reply_markup=keyboard)
+
+
+def _delete_server(query, index):
+    users = load_user_data()
+    record = users.get(str(query.from_user.id), {})
+    servers = record.get("servers", [])
+    if index >= len(servers):
+        query.answer("Server tidak ditemukan.", show_alert=True)
+        return
+    name = servers.pop(index).get("name", "-")
+    save_user_data(users)
+    session = user_data_dict.get(query.from_user.id)
+    if session and session.server_name == name:
+        user_data_dict.pop(query.from_user.id, None)
+    query.answer("Server dihapus.")
+    query.edit_message_text(f"✅ Server *{name}* telah dihapus.", parse_mode="Markdown", reply_markup=home_keyboard())
+
+
+def _ask_delete_server(query, index):
+    servers = _servers_for(query.from_user.id)
+    if index >= len(servers):
+        query.answer("Server tidak ditemukan.", show_alert=True)
+        return
+    query.answer()
+    query.edit_message_text(
+        f"Hapus server *{servers[index]['name']}*? Tindakan ini tidak dapat dibatalkan.",
+        parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Ya, hapus", callback_data=f"srv:deleteconfirm:{index}"),
+            InlineKeyboardButton("Batal", callback_data=f"srv:manage:{index}"),
+        ]]))
 
 
 def _connect_server(query, index):
@@ -175,7 +278,7 @@ def _connect_server(query, index):
         f"✅ Tersambung ke *{server['name']}*.\nPilih aksi:",
         parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("📡 Monitor PPPoE", callback_data="menu:pppoe"),
-             InlineKeyboardButton("📈 Traffic", callback_data="menu:traffic")],
+             InlineKeyboardButton("📈 Monitor Traffic", callback_data="menu:traffic")],
             [InlineKeyboardButton("🏠 Dashboard", callback_data="nav:home")],
         ]))
 
@@ -216,8 +319,10 @@ def _show_interfaces(query, index):
     if not interfaces:
         query.answer("Tidak ada interface yang diaktifkan di Tools > Graphing.", show_alert=True)
         return
-    keyboard = [[InlineKeyboardButton(name, callback_data=f"tr:iface:{server_ref}:{name}")]
-                for name in interfaces[:40]]
+    keyboard = [[InlineKeyboardButton(
+        f"{item['name']} — {item['comment']}" if item.get("comment") else item["name"],
+        callback_data=f"tr:iface:{server_ref}:{item['name']}")]
+                for item in interfaces[:40]]
     query.answer()
     query.edit_message_text("Pilih interface yang aktif di Tools > Graphing:", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -295,11 +400,12 @@ def _admin_callback(update, context):
         query.answer("Mode user testing aktif.")
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🖥 Server Saya", callback_data="menu:servers"),
-             InlineKeyboardButton("📡 Monitor PPPoE", callback_data="menu:pppoe")],
-            [InlineKeyboardButton("🔧 Server Custom", callback_data="srv:custom")],
-            [InlineKeyboardButton("📈 Traffic", callback_data="menu:traffic"),
-             InlineKeyboardButton("💳 Saldo", callback_data="menu:wallet")],
-            [InlineKeyboardButton("🔒 Logout Router", callback_data="nav:logout")],
+             InlineKeyboardButton("🔧 Server Custom", callback_data="srv:custom")],
+            [InlineKeyboardButton("📡 Monitor PPPoE", callback_data="menu:pppoe"),
+             InlineKeyboardButton("📈 Monitor Traffic", callback_data="menu:traffic")],
+            [InlineKeyboardButton("💳 Saldo", callback_data="menu:wallet"),
+             InlineKeyboardButton("ℹ️ Info", callback_data="menu:info")],
+            [InlineKeyboardButton("🔔 Info Notify", callback_data="menu:notify")],
             [InlineKeyboardButton("🏠 Dashboard Admin", callback_data="nav:home")],
         ])
         query.edit_message_text("🧪 *Dashboard User Testing*", parse_mode="Markdown", reply_markup=keyboard)
@@ -313,13 +419,34 @@ def _admin_callback(update, context):
         query.edit_message_text("Kirim foto QRIS berikutnya untuk mengganti QRIS topup.")
         return
     if action == "settings":
+        prices = load_settings()["prices"]
         query.answer()
-        query.edit_message_text("Pengaturan admin:\n/setprice <fitur> <nominal>\n/settrial <nominal>\n/setrole <id> <operator|admin|user>\n/setqris")
+        query.edit_message_text(
+            "⚙️ *Harga & Role*\n"
+            f"Test PPPoE: Rp{prices['testppp']:,}\nTraffic: Rp{prices['traffic']:,}\nNotifikasi: Rp{prices['notify']:,}\n\n"
+            "Ubah harga: /setprice <testppp|traffic|notify> <nominal>\n"
+            "Trial: /settrial <nominal>\nRole: /setrole <id> <operator|admin|user>\nQRIS: /setqris",
+            parse_mode="Markdown", reply_markup=home_keyboard())
         return
     if action == "users":
         users = load_user_data()
         query.answer()
         query.edit_message_text(f"Total user terdaftar: {len(users)}\nGunakan /useraktif atau /saldouser untuk rincian.")
+        return
+    if action == "registrations":
+        pending_registrations_menu(query)
+        return
+    if action == "topups":
+        pending_topups_menu(query)
+        return
+    if action == "manualtopup":
+        begin_manual_topup(query, context)
+        return
+    if action == "manualcancel":
+        context.user_data.pop("manual_topup_step", None)
+        context.user_data.pop("manual_topup_user_id", None)
+        query.answer("Tambah saldo dibatalkan.")
+        query.edit_message_text("Tambah saldo dibatalkan.", reply_markup=home_keyboard())
         return
     if action == "monthly":
         query.answer()
@@ -346,3 +473,25 @@ def _ensure_staff_test_record(user):
             "account_type": "admin",
         }
         save_user_data(users)
+
+
+def _input_wizard_callback(query, context):
+    parts = query.data.split(":")
+    if parts[1] == "cancel":
+        context.user_data.pop("server_wizard", None)
+        context.user_data.pop("custom_server_wizard", None)
+        query.answer("Input dibatalkan.")
+        query.edit_message_text("Input router dibatalkan.", reply_markup=home_keyboard())
+        return
+    kind = parts[2]
+    query.answer("Input diulang.")
+    if kind == "stored":
+        context.user_data.pop("custom_server_wizard", None)
+        context.user_data["server_wizard"] = {"step": "name"}
+        query.edit_message_text("Nama server apa yang ingin disimpan?", reply_markup=wizard_keyboard("stored"))
+    else:
+        context.user_data.pop("server_wizard", None)
+        context.user_data["custom_server_wizard"] = {"step": "ip"}
+        query.edit_message_text(
+            "Masukkan IP atau hostname MikroTik. Data ini hanya dipakai untuk sesi saat ini dan tidak disimpan.",
+            reply_markup=wizard_keyboard("custom"))

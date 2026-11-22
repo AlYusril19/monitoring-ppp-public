@@ -2,11 +2,15 @@ from models.userdata import UserData, user_data_dict
 from handlers.handler_onboarding import handle_onboarding_input
 from handlers.handler_server import handle_server_wizard
 from handlers.handler_start import handle_custom_server_input
+from handlers.handler_wallet import handle_manual_topup_input
+from handlers.handler_monitor_settings import handle_monitoring_input
 
 def handle_input(update, context):
     if (handle_onboarding_input(update, context)
+            or handle_monitoring_input(update, context)
             or handle_server_wizard(update, context)
-            or handle_custom_server_input(update, context)):
+            or handle_custom_server_input(update, context)
+            or handle_manual_topup_input(update, context)):
         return
     user_id = update.effective_user.id
     user_data = user_data_dict.get(user_id)

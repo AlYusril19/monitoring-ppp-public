@@ -43,6 +43,8 @@ def check_monthly_user_transactions(update, context):
             trans_date = datetime.fromisoformat(transaction["date"])
 
             if trans_date.year == current_year and trans_date.month == selected_month:
+                if transaction.get("type") == "trial_balance":
+                    continue
                 if transaction["amount"] > 0:
                     monthly_income += transaction["amount"]
                 else:
@@ -98,6 +100,8 @@ def check_yearly_user_transactions(update, context):
             trans_date = datetime.fromisoformat(transaction["date"])
 
             if trans_date.year == selected_year:
+                if transaction.get("type") == "trial_balance":
+                    continue
                 if transaction["amount"] > 0:
                     yearly_income += transaction["amount"]
                 else:

@@ -7,6 +7,8 @@ Graphify menyimpan peta hubungan kode di `graphify-out/graph.json`. Setelah grap
 ```powershell
 graphify query "Bagaimana alur topup saldo dan approval admin?"
 graphify query "Apa yang memanggil monitoring traffic?"
+graphify query "Bagaimana threshold notifikasi dan profile PPPoE dikecualikan diterapkan?"
+graphify query "Bagaimana alur Server Saya untuk tambah, edit, dan hapus server?"
 graphify path "main()" "check_client_status_and_notify()"
 ```
 

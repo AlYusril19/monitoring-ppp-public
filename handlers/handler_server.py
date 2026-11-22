@@ -1,5 +1,6 @@
 from configs.data_json_user import save_user_data, load_user_data
 from configs.get_current_time import get_current_time
+from configs.navigation import wizard_keyboard, session_action_keyboard
 
 date_now = get_current_time
 
@@ -8,7 +9,21 @@ def start_server_wizard(query, context):
     """Start a sequential server form from an inline button."""
     context.user_data["server_wizard"] = {"step": "name"}
     query.answer()
-    query.edit_message_text("Nama server apa yang ingin disimpan? Ketik /cancel untuk membatalkan.")
+    query.edit_message_text("Nama server apa yang ingin disimpan?", reply_markup=wizard_keyboard("stored"))
+
+
+def start_edit_server_wizard(query, context, index):
+    """Edit a saved server through the same safe, password-deleting wizard."""
+    servers = load_user_data().get(str(query.from_user.id), {}).get("servers", [])
+    if index >= len(servers):
+        query.answer("Server tidak ditemukan.", show_alert=True)
+        return
+    server = servers[index]
+    context.user_data["server_wizard"] = {"mode": "edit", "index": index, "step": "name"}
+    query.answer()
+    query.edit_message_text(
+        f"Ubah server *{server['name']}*. Masukkan nama server baru:",
+        parse_mode="Markdown", reply_markup=wizard_keyboard("stored"))
 
 
 def handle_server_wizard(update, context):
@@ -27,7 +42,7 @@ def handle_server_wizard(update, context):
         field, prompt = prompts[step]
         wizard[field] = value
         wizard["step"] = {"name": "ip", "ip": "username", "username": "password"}[step]
-        update.effective_message.reply_text(prompt)
+        update.effective_message.reply_text(prompt, reply_markup=wizard_keyboard("stored"))
         return True
 
     if step == "password":
@@ -42,14 +57,28 @@ def handle_server_wizard(update, context):
             context.user_data.pop("server_wizard", None)
             update.effective_chat.send_message("Akun tidak ditemukan. Silakan registrasi kembali.")
             return True
-        record.setdefault("servers", []).append({
+        server_data = {
             "name": wizard["name"], "ip": wizard["ip"], "username": wizard["username"],
             "password": wizard["password"], "created_at": get_current_time(), "updated_at": get_current_time(),
-        })
+        }
+        if wizard.get("mode") == "edit":
+            index = wizard.get("index")
+            servers = record.setdefault("servers", [])
+            if index is None or index >= len(servers):
+                context.user_data.pop("server_wizard", None)
+                update.effective_chat.send_message("Server tidak ditemukan lagi. Pengubahan dibatalkan.")
+                return True
+            server_data["created_at"] = servers[index].get("created_at", get_current_time())
+            servers[index] = server_data
+            result = f"✅ Server {wizard['name']} diperbarui. Password Anda sudah dihapus dari chat."
+        else:
+            record.setdefault("servers", []).append(server_data)
+            result = f"✅ Server {wizard['name']} tersimpan. Password Anda sudah dihapus dari chat."
         save_user_data(users)
         context.user_data.pop("server_wizard", None)
         update.effective_chat.send_message(
-            f"✅ Server {wizard['name']} tersimpan. Password Anda sudah dihapus dari chat.")
+            result,
+            reply_markup=session_action_keyboard())
         return True
     return False
 

@@ -53,17 +53,17 @@ def check_client_status_and_notify(context):
                 if connection:
                     
                     # Mendapatkan semua pengguna yang statusnya "down"
-                    down_users = get_down_users(connection)
-                    if down_users:
+                    down_users = get_down_users(connection, config.get("excluded_profiles"))
+                    if len(down_users) >= int(config["notify_down_threshold"]):
                         down_users_message = f"Client PPPOE status *DOWN ({len(down_users)} users)*:\n\n"
                         for username, last_logged_out in down_users:
                             down_users_message += f"❌ {username} - ({last_logged_out})\n"
 
                         # Pesan Warning Down PPP
                         warning_message = ""
-                        if len(down_users) >= 6:
+                        if len(down_users) >= int(config["warning_threshold"]):
                             warning_message = f"*Warning* ⚠️ Harap segera dicek lebih lanjut! /why?"
-                        if len(down_users) >= 12:
+                        if len(down_users) >= int(config["critical_threshold"]):
                             warning_message = f"*Warning* 🚨 Harap segera dicek lebih lanjut! /why?"
 
                         # Only the first DOWN state is charged/notified.  Subsequent

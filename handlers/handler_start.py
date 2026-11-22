@@ -6,8 +6,8 @@ from handlers.handler_exit import exit_command_handler
 from configs.data_json_user import load_user_data, save_user_data, get_registered_username
 from configs.format_rupiah import format_rupiah
 from configs.billing import charge_user
-from configs.app_settings import get_price
-from configs.navigation import home_keyboard
+from configs.app_settings import get_monitoring_config, get_price
+from configs.navigation import home_keyboard, session_action_keyboard, wizard_keyboard
 
 def start_command_handler(update, context):
     user_id = update.effective_user.id
@@ -36,7 +36,7 @@ def begin_custom_server(context, user_id, message):
     context.user_data["custom_server_wizard"] = {"step": "ip"}
     message.reply_text(
         "🔧 *Server Custom*\nMasukkan IP atau hostname MikroTik. Data ini hanya dipakai untuk sesi saat ini dan tidak disimpan.",
-        parse_mode="Markdown")
+        parse_mode="Markdown", reply_markup=wizard_keyboard("custom"))
 
 
 def handle_custom_server_input(update, context):
@@ -49,12 +49,12 @@ def handle_custom_server_input(update, context):
     if step == "ip":
         wizard["ip"] = value
         wizard["step"] = "username"
-        update.effective_message.reply_text("Masukkan username RouterOS (gunakan akun READ):")
+        update.effective_message.reply_text("Masukkan username RouterOS (gunakan akun READ):", reply_markup=wizard_keyboard("custom"))
         return True
     if step == "username":
         wizard["username"] = value
         wizard["step"] = "password"
-        update.effective_message.reply_text("Masukkan password. Pesan password akan dihapus setelah diterima:")
+        update.effective_message.reply_text("Masukkan password. Pesan password akan dihapus setelah diterima:", reply_markup=wizard_keyboard("custom"))
         return True
     if step == "password":
         try:
@@ -68,7 +68,8 @@ def handle_custom_server_input(update, context):
         session.interface = None
         context.user_data.pop("custom_server_wizard", None)
         update.effective_chat.send_message(
-            "✅ Server custom tersambung untuk sesi ini. Password telah dihapus dari chat. Gunakan Dashboard untuk Monitor PPPoE atau Traffic.")
+            "✅ Server custom tersambung untuk sesi ini. Password telah dihapus dari chat. Pilih aksi berikutnya:",
+            reply_markup=session_action_keyboard())
         return True
     return False
 
@@ -106,17 +107,19 @@ def run_pppoe_test(context, user_id, chat_id, user_data):
             send_message(bot, chat_id, f"Login ke *{nama_server}*")
 
             # Mendapatkan semua pengguna yang statusnya "down"
-            down_users = get_down_users(connection)
-            if down_users:
+            config = get_monitoring_config(load_user_data().get(str(user_id), {}))
+            down_users = get_down_users(connection, config.get("excluded_profiles"))
+            notify_threshold = int(config["notify_down_threshold"])
+            if len(down_users) >= notify_threshold:
                 down_users_message = f"Client PPPOE status *DOWN ({len(down_users)} users)*:\n\n"
                 for username, last_logged_out in down_users:
                     down_users_message += f"❌ {username} - ({last_logged_out})\n"
                 
                 # Pesan Warning Down PPP
                 warning_message = ""
-                if len(down_users) >= 5:
+                if len(down_users) >= int(config["warning_threshold"]):
                     warning_message = f"*Warning* ⚠️ Harap segera dicek lebih lanjut! /why?"
-                if len(down_users) >= 10:
+                if len(down_users) >= int(config["critical_threshold"]):
                     warning_message = f"*Warning* 🚨 Harap segera dicek lebih lanjut! /why?"
                 
                 # Pesan Down PPP ke User Telegram
@@ -133,6 +136,18 @@ def run_pppoe_test(context, user_id, chat_id, user_data):
                                               f"User Down *({len(down_users)} Users*)\n" \
                                               f"{warning_message}\n"\
                                               f"Sisa saldo User {saldo_format}")
+            elif down_users:
+                # A manual test still confirms the router was checked, but does not
+                # turn a small outage into an alert when the user chose a higher limit.
+                send_message(
+                    bot, chat_id,
+                    f"Terdeteksi {len(down_users)} pelanggan down, tetapi belum mencapai batas notifikasi Anda "
+                    f"({notify_threshold} pelanggan). Tidak ada alert down yang ditampilkan.")
+                send_message(bot, chat_id, f"biaya transaksi sebesar Rp{start_cost}")
+                saldo_format = format_rupiah(remaining or 0)
+                send_message(bot_log, chat_log, f"user *{username_telegram}* tes PPPoE ke *{nama_server}*\n" \
+                                                f"Down di bawah batas notifikasi ({len(down_users)}/{notify_threshold})\n" \
+                                                f"Sisa saldo User {saldo_format}")
             else:
                 send_message(bot, chat_id, "User Status UP Semua 🤩")
                 send_message(bot,chat_id, f"biaya transaksi sebesar Rp{start_cost}")
@@ -140,7 +155,7 @@ def run_pppoe_test(context, user_id, chat_id, user_data):
                 saldo_format = format_rupiah(remaining or 0)
                 send_message(bot_log, chat_log,f"user *{username_telegram}* login ke *{nama_server}*\n" \
                                                f"Sisa saldo User {saldo_format}")
-            bot.send_message(chat_id=chat_id, text="Pilih aksi berikutnya:", reply_markup=home_keyboard())
+            bot.send_message(chat_id=chat_id, text="Pilih aksi berikutnya:", reply_markup=session_action_keyboard())
         else:
             send_message(bot, chat_id, "Login Gagal")
             bot.send_message(chat_id=chat_id, text="Kembali ke dashboard:", reply_markup=home_keyboard())

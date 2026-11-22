@@ -1,11 +1,17 @@
 # Mencari User PPPOE Down
-def get_down_users(connection):
+def get_down_users(connection, excluded_profiles=None):
     try:
         # Menggunakan fungsi '/ppp/secret/print' untuk mendapatkan semua pengguna
         secret_data = connection('/ppp/secret/print')
         active_data = connection('/ppp/active/print')
 
-        secret_names = {secret['name']: secret['last-logged-out'] for secret in secret_data if secret.get('profile') not in {'expired', 'pribadi-home'}}
+        excluded = {'expired', 'pribadi-home'}
+        excluded.update(str(profile).strip().lower() for profile in (excluded_profiles or []) if str(profile).strip())
+        secret_names = {
+            secret['name']: secret.get('last-logged-out', '-')
+            for secret in secret_data
+            if str(secret.get('profile', '')).strip().lower() not in excluded
+        }
         active_names = {active['name']: active['uptime'] for active in active_data}
 
         down_users = []
@@ -68,11 +74,25 @@ def get_graphing_interfaces(connection):
         enabled = [item for item in graphing
                    if str(item.get('disabled', False)).lower() not in {'true', 'yes', '1'}]
         configured = [str(item.get('interface', '')) for item in enabled]
+        details = get_interface_details(connection)
         if 'all' in configured:
-            return get_interfaces(connection)
-        return [name for name in configured if name and name != 'all']
+            return details
+        enabled_names = {name for name in configured if name and name != 'all'}
+        return [item for item in details if item["name"] in enabled_names]
     except Exception as exc:
         print(f"Gagal mengambil konfigurasi graphing: {exc}")
+        return []
+
+
+def get_interface_details(connection):
+    """Return interface name and RouterOS comment for friendly button labels."""
+    try:
+        return [
+            {"name": str(item["name"]), "comment": str(item.get("comment", "")).strip()}
+            for item in connection('/interface/print') if item.get("name")
+        ]
+    except Exception as exc:
+        print(f"Gagal mengambil detail interface: {exc}")
         return []
 # Compatibility for integrations that imported the old singular function.
 get_interface = get_interfaces
