@@ -1,124 +1,95 @@
+"""Revenue reports for staff (/laporanbulanan, /laporantahunan, 📊/📈 buttons).
+
+Income  = saldo masuk (topup, topup_request, manual_topup); trial is excluded.
+Outcome = pemakaian layanan (testppp, traffic, notify).
+"""
 from datetime import datetime
+
 from pytz import timezone
-from configs.data_json_user import load_user_data
+
 from configs.app_settings import is_staff
+from configs.data_json_user import load_user_data
 from configs.format_rupiah import format_rupiah
+from configs.navigation import home_keyboard
+
+MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+          "Agustus", "September", "Oktober", "November", "Desember"]
+
+
+def _totals(transactions, year, month=None):
+    """Jumlahkan saldo masuk & pemakaian dari daftar transaksi (trial diabaikan)."""
+    income = expense = 0
+    for transaction in transactions:
+        if transaction.get("type") == "trial_balance":
+            continue
+        try:
+            date = datetime.fromisoformat(transaction["date"])
+        except (KeyError, ValueError):
+            continue
+        if date.year != year or (month is not None and date.month != month):
+            continue
+        amount = transaction.get("amount", 0)
+        if amount > 0:
+            income += amount
+        else:
+            expense += abs(amount)
+    return income, expense
+
+
+def _report(update, context, year, month=None):
+    """Susun dan kirim laporan semua user untuk satu tahun / bulan."""
+    chat_id = update.effective_chat.id
+    if not is_staff(update.effective_user.id):
+        context.bot.send_message(chat_id=chat_id, text="Akses ditolak.", reply_markup=home_keyboard())
+        return
+    period = f"{MONTHS[month - 1]} {year}" if month else str(year)
+    lines, total_income, total_expense = [], 0, 0
+    for user_id, record in load_user_data().items():
+        income, expense = _totals(record.get("transactions", []), year, month)
+        total_income += income
+        total_expense += expense
+        if income or expense:
+            lines.append(f"👤 {record.get('username_telegram', 'Unknown')} ({user_id})\n"
+                         f"   - Saldo masuk: {format_rupiah(income)}\n"
+                         f"   - Pemakaian: {format_rupiah(expense)}")
+    body = "\n\n".join(lines) if lines else "Tidak ada transaksi pada periode ini."
+    usage = "/laporanbulanan <bulan 1-12>" if month else "/laporantahunan <tahun>"
+    text = (f"📊 Laporan {period}\n\n{body}\n\n"
+            f"Total saldo masuk: {format_rupiah(total_income)}\n"
+            f"Total pemakaian: {format_rupiah(total_expense)}\n"
+            f"(saldo trial tidak dihitung)\n\nPeriode lain: {usage}")
+    context.bot.send_message(chat_id=chat_id, text=text, reply_markup=home_keyboard())
+
 
 def check_monthly_user_transactions(update, context):
-    user_id = update.effective_user.id
-    user_data = load_user_data()
-
-    if not is_staff(user_id):
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Akses ditolak.")
-        return
-
-    now = datetime.now(timezone('Asia/Jakarta'))
-
+    """/laporanbulanan [bulan] dan tombol 📊."""
+    now = datetime.now(timezone("Asia/Jakarta"))
     args = getattr(context, "args", None) or []
-    if len(args) == 1:
+    month = now.month
+    if args:
         try:
-            selected_month = int(args[0])
-            if selected_month < 1 or selected_month > 12:
+            month = int(args[0])
+            if not 1 <= month <= 12:
                 raise ValueError
         except ValueError:
-            context.bot.send_message(chat_id=update.effective_chat.id, text="Format salah. Gunakan /laporanbulanan <bulan> (1-12)")
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                                     text="Format salah. Gunakan /laporanbulanan <bulan> (1-12)",
+                                     reply_markup=home_keyboard())
             return
-    else:
-        selected_month = now.month
+    _report(update, context, now.year, month)
 
-    current_year = now.year
-
-    total_income = 0
-    total_outcome = 0
-    report = ""
-
-    for user_id, user_info in user_data.items():
-        username = user_info.get("username_telegram", "Unknown")
-        transactions = user_info.get("transactions", [])
-
-        monthly_income = 0
-        monthly_expense = 0
-
-        for transaction in transactions:
-            trans_date = datetime.fromisoformat(transaction["date"])
-
-            if trans_date.year == current_year and trans_date.month == selected_month:
-                if transaction.get("type") == "trial_balance":
-                    continue
-                if transaction["amount"] > 0:
-                    monthly_income += transaction["amount"]
-                else:
-                    monthly_expense += abs(transaction["amount"])
-        total_income += monthly_income
-        total_outcome += monthly_expense
-        if monthly_income > 0 or monthly_expense > 0:
-            report += f"👤User {username} ({user_id})\n"
-            report += f" Transaksi bulan {trans_date.strftime('%B')}:\n"
-            report += f"   - Pemasukan: {format_rupiah(monthly_income)}\n"
-            report += f"   - Pengeluaran: {format_rupiah(monthly_expense)}\n\n"
-            
-    report += f"Total Income : {format_rupiah(total_income)}\n"
-    report += f"Total Outcome : {format_rupiah(total_outcome)}\n"
-    report += "gunakan /laporanbulanan <bulan format angka> untuk bulan tertentu."
-    if report:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=report)
-    else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Tidak ada transaksi untuk bulan ini.")
 
 def check_yearly_user_transactions(update, context):
-    user_id = update.effective_user.id
-    user_data = load_user_data()
-
-    if not is_staff(user_id):
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Akses ditolak.")
-        return
-
-    now = datetime.now(timezone('Asia/Jakarta'))
-
+    """/laporantahunan [tahun] dan tombol 📈."""
+    now = datetime.now(timezone("Asia/Jakarta"))
     args = getattr(context, "args", None) or []
-    if len(args) == 1:
+    year = now.year
+    if args:
         try:
-            selected_year = int(args[0])
+            year = int(args[0])
         except ValueError:
-            context.bot.send_message(chat_id=update.effective_chat.id, text="Format salah. Gunakan /laporantahunan <tahun>")
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                                     text="Format salah. Gunakan /laporantahunan <tahun>",
+                                     reply_markup=home_keyboard())
             return
-    else:
-        selected_year = now.year
-
-    total_income = 0
-    total_outcome = 0
-    report = ""
-
-    for user_id_iter, user_info in user_data.items():  
-        username = user_info.get("username_telegram", "Unknown")
-        transactions = user_info.get("transactions", [])
-
-        yearly_income = 0  # Reset nilai pendapatan tahunan untuk setiap pengguna
-        yearly_expense = 0  # Reset nilai pengeluaran tahunan untuk setiap pengguna
-
-        for transaction in transactions:
-            trans_date = datetime.fromisoformat(transaction["date"])
-
-            if trans_date.year == selected_year:
-                if transaction.get("type") == "trial_balance":
-                    continue
-                if transaction["amount"] > 0:
-                    yearly_income += transaction["amount"]
-                else:
-                    yearly_expense += abs(transaction["amount"])
-
-        if yearly_income > 0 or yearly_expense > 0:
-            report += f"👤User {username} ({user_id_iter})\n"  
-            report += f"Transaksi tahun {selected_year}:\n"
-            report += f"   - Pemasukan: {format_rupiah(yearly_income)}\n"
-            report += f"   - Pengeluaran: {format_rupiah(yearly_expense)}\n\n"
-        total_income += yearly_income
-        total_outcome += yearly_expense
-    
-    report += f"Total Income {selected_year} : {format_rupiah(total_income)}\n"
-    report += f"Total Outcome {selected_year} : {format_rupiah(total_outcome)}\n"
-    report += "gunakan /tahunan <tahun> untuk tahun tertentu."
-    if report:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=report)
-    else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Tidak ada transaksi untuk tahun ini.")
+    _report(update, context, year)

@@ -1,4 +1,20 @@
-# Local runtime data: contains user records, balances, transactions, and bot state.
+# Data runtime (berisi data user, saldo, password router, state bot) — JANGAN di-commit, repo publik.
 datauser.json
-last_notification_time.json
+datauser.backup-*.json
 app_info.json
+chat_messages.json
+last_notification_time.json
+
+# Rahasia: token bot & ID admin.
+.env
+
+# Graph Graphify lokal (dibuat ulang dengan: graphify . --update).
+graphify-out/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Temporary files from atomic JSON writes (may contain user data)
+*.json.tmp

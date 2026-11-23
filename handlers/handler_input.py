@@ -1,46 +1,30 @@
-from models.userdata import UserData, user_data_dict
+"""Route free text to whichever form (wizard) is currently open for this chat."""
+from configs.chat_tracker import mark_input_consumed
+from handlers.handler_admin_settings import handle_admin_input
+from handlers.handler_monitor_settings import handle_monitoring_input
 from handlers.handler_onboarding import handle_onboarding_input
 from handlers.handler_server import handle_server_wizard
 from handlers.handler_start import handle_custom_server_input
-from handlers.handler_wallet import handle_manual_topup_input
-from handlers.handler_monitor_settings import handle_monitoring_input
+from handlers.handler_traffic import handle_www_port_input
+from handlers.handler_wallet import handle_manual_topup_input, handle_topup_custom_input
+
+# Each handler returns True when it consumed the message.
+WIZARDS = (
+    handle_onboarding_input,
+    handle_admin_input,
+    handle_monitoring_input,
+    handle_server_wizard,
+    handle_custom_server_input,
+    handle_manual_topup_input,
+    handle_topup_custom_input,
+    handle_www_port_input,
+)
+
 
 def handle_input(update, context):
-    if (handle_onboarding_input(update, context)
-            or handle_monitoring_input(update, context)
-            or handle_server_wizard(update, context)
-            or handle_custom_server_input(update, context)
-            or handle_manual_topup_input(update, context)):
-        return
-    user_id = update.effective_user.id
-    user_data = user_data_dict.get(user_id)
-    text_message = "Semua informasi telah disimpan.\n"\
-                    "Ketik /testppp untuk monitoring jaringan.\n"\
-                    "Ketik /traffic untuk monitoring traffic interface"
-    if user_data is None:
-        user_data = UserData()
-        user_data_dict[user_id] = user_data
-
-    # Mendapatkan input dari pengguna
-    if user_data.ip_address is None:
-        user_data.ip_address = update.message.text.strip()
-        message = "Silakan masukkan username:"
-        update.message.reply_text(message)
-
-    elif user_data.router_username is None:
-        user_data.router_username = update.message.text.strip()
-        message = "Silakan masukkan password:"
-        update.message.reply_text(message)
-
-    elif user_data.router_password is None:
-        user_data.router_password = update.message.text.strip()
-        update.message.reply_text(text_message)
-        return
-
-    elif user_data.interface is None:
-        user_data.interface = update.message.text.strip()
-        message = "Semua informasi telah disimpan. Ketik /traffic untuk melanjutkan."
-        update.message.reply_text(message)
-        return
-    else:
-        update.message.reply_text(text_message)
+    """Teks bebas: teruskan ke form yang sedang terbuka (WIZARDS); tanpa form → diam."""
+    for wizard in WIZARDS:
+        if wizard(update, context):
+            mark_input_consumed()  # the user's answer is removed after handling
+            return
+    # No form is open: stay silent. Ordinary chat text must never trigger a reply.

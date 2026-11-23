@@ -4,6 +4,7 @@ Telegram only permits deletion for a limited period; failures are deliberately
 ignored because a user may have deleted the message themselves.
 """
 def schedule_cleanup(context, message, minutes):
+    """Jadwalkan penghapusan satu pesan setelah N menit (0 = tidak)."""
     if not minutes or int(minutes) <= 0:
         return
     context.job_queue.run_once(
@@ -13,6 +14,7 @@ def schedule_cleanup(context, message, minutes):
 
 
 def _delete_message(context):
+    """Job: hapus pesan terjadwal; error diabaikan."""
     try:
         context.bot.delete_message(**context.job.context)
     except Exception:

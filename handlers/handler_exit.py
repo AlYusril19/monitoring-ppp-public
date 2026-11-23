@@ -2,6 +2,7 @@ from models.userdata import user_data_dict
 from configs.navigation import home_keyboard
 
 def exit_command_handler(update, context):
+    """/exit: hapus sesi router (Server Saya/Custom) dari memori."""
     user_id = update.effective_user.id
     user_data_dict.pop(user_id, None)
     update.effective_message.reply_text(
